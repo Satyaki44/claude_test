@@ -1,11 +1,13 @@
 """
 main.py
 Orchestrates: scrape → filter → summarize → save digest.
-Run locally:  python main.py
-Run via cron: see .github/workflows/daily_digest.yml
+Run locally:       python main.py
+Preview (no key):  python main.py --preview
+Run via cron:      see .github/workflows/daily_digest.yml
 """
 
 import os
+import sys
 import logging
 from datetime import datetime, timezone
 from dotenv import load_dotenv
@@ -35,7 +37,19 @@ def save_digest(text: str) -> str:
     return path
 
 
-def run():
+def print_preview(tweets: list[dict]):
+    """Pretty-print filtered tweets without calling any LLM."""
+    print(f"\n{'='*60}")
+    print(f"  RAW FEED PREVIEW — {len(tweets)} high-signal tweets")
+    print(f"{'='*60}\n")
+    for i, t in enumerate(tweets, 1):
+        print(f"#{i}  @{t['handle']}  |  ❤ {t['likes']}  🔁 {t['retweets']}")
+        print(f"    {t['text'][:280]}")
+        print(f"    {t['link']}")
+        print()
+
+
+def run(preview: bool = False):
     log.info("=== GTM Engineering Daily Digest ===")
 
     # Step 1: scrape
@@ -50,6 +64,10 @@ def run():
         log.warning("All tweets filtered out. Try lowering thresholds in filter.py.")
         return
 
+    if preview:
+        print_preview(filtered)
+        return
+
     # Step 3: summarize
     digest = summarize(filtered)
 
@@ -57,11 +75,10 @@ def run():
     path = save_digest(digest)
     log.info(f"Digest saved to: {path}")
 
-    # Print to stdout so GitHub Actions log shows it
     print("\n" + "=" * 60)
     print(digest)
     print("=" * 60)
 
 
 if __name__ == "__main__":
-    run()
+    run(preview="--preview" in sys.argv)
