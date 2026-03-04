@@ -1,0 +1,38 @@
+name: GTM Engineering Daily Digest
+
+on:
+  schedule:
+    - cron: "0 7 * * *"   # 7:00 AM UTC every day
+  workflow_dispatch:        # allow manual trigger from GitHub UI
+
+jobs:
+  digest:
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write       # needed to commit the digest file back
+
+    steps:
+      - name: Checkout repo
+        uses: actions/checkout@v4
+
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: "3.11"
+          cache: "pip"
+
+      - name: Install dependencies
+        run: pip install -r requirements.txt
+
+      - name: Run digest
+        env:
+          ANTHROPIC_API_KEY: ${{ secrets.ANTHROPIC_API_KEY }}
+        run: python main.py
+
+      - name: Commit digest to repo
+        run: |
+          git config user.name  "github-actions[bot]"
+          git config user.email "github-actions[bot]@users.noreply.github.com"
+          git add digests/
+          git diff --cached --quiet || git commit -m "chore: daily GTM digest $(date -u +%Y-%m-%d)"
+          git push
