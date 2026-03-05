@@ -1,65 +1,71 @@
 """
 filter.py
-Keeps only tweets that meet engagement and content quality bars.
+Filters Substack posts by recency. Keeps posts from the last LOOKBACK_HOURS.
 """
 
 import logging
 from datetime import datetime, timezone, timedelta
+from email.utils import parsedate_to_datetime
+from typing import Optional
 
 log = logging.getLogger(__name__)
 
-# --- Thresholds (tune these freely) ------------------------------------------
-MIN_LIKES     = 30
-MIN_RETWEETS  = 5
-MIN_LENGTH    = 80   # characters — filters one-liners and pure image posts
-LOOKBACK_HOURS = 24
+LOOKBACK_HOURS = 168  # 7 days
+
+
+def _parse_date(date_str: str) -> Optional[datetime]:
+    """
+    Parse RSS date strings into timezone-aware datetimes.
+    Handles RFC 2822 format (standard RSS): "Wed, 05 Mar 2026 10:00:00 +0000"
+    Falls back to common ISO formats.
+    """
+    if not date_str:
+        return None
+
+    # Try RFC 2822 first (standard RSS pubDate format)
+    try:
+        return parsedate_to_datetime(date_str)
+    except Exception:
+        pass
+
+    # Fallback: try ISO formats
+    for fmt in ("%Y-%m-%dT%H:%M:%S%z", "%Y-%m-%dT%H:%M:%SZ", "%Y-%m-%d"):
+        try:
+            dt = datetime.strptime(date_str.strip(), fmt)
+            if dt.tzinfo is None:
+                dt = dt.replace(tzinfo=timezone.utc)
+            return dt
+        except ValueError:
+            continue
+
+    return None
 
 
 def _within_window(date_str: str, hours: int) -> bool:
-    """Return True if the tweet date falls within the last `hours` hours."""
-    if not date_str:
-        return True   # no date info → don't discard
-    try:
-        # ntscraper returns e.g. "Mar 3, 2026 · 10:30 AM UTC"
-        # Try a few common formats
-        for fmt in (
-            "%b %d, %Y · %I:%M %p UTC",
-            "%b %d, %Y",
-            "%Y-%m-%dT%H:%M:%S",
-        ):
-            try:
-                dt = datetime.strptime(date_str.strip(), fmt).replace(tzinfo=timezone.utc)
-                cutoff = datetime.now(tz=timezone.utc) - timedelta(hours=hours)
-                return dt >= cutoff
-            except ValueError:
-                continue
-    except Exception:
-        pass
-    return True   # parse failed → keep tweet (conservative)
+    """Return True if the post date falls within the last `hours` hours."""
+    dt = _parse_date(date_str)
+    if dt is None:
+        return True  # can't parse → keep it (conservative)
+    cutoff = datetime.now(tz=timezone.utc) - timedelta(hours=hours)
+    return dt >= cutoff
 
 
-def filter_tweets(tweets: list[dict]) -> list[dict]:
+def filter_posts(posts: list[dict]) -> list[dict]:
     """
-    Apply engagement + recency + length filters.
-    Returns filtered list sorted by likes desc.
+    Keep only posts from the last LOOKBACK_HOURS, sorted by date desc.
     """
     kept = []
-    for t in tweets:
-        reasons = []
-        if t["likes"] < MIN_LIKES:
-            reasons.append(f"likes={t['likes']} < {MIN_LIKES}")
-        if t["retweets"] < MIN_RETWEETS:
-            reasons.append(f"rt={t['retweets']} < {MIN_RETWEETS}")
-        if len(t["text"]) < MIN_LENGTH:
-            reasons.append(f"length={len(t['text'])} < {MIN_LENGTH}")
-        if not _within_window(t["date"], LOOKBACK_HOURS):
-            reasons.append("too old")
-
-        if reasons:
-            log.debug(f"Dropped ({', '.join(reasons)}): {t['link']}")
+    for post in posts:
+        if _within_window(post["date"], LOOKBACK_HOURS):
+            kept.append(post)
         else:
-            kept.append(t)
+            log.debug(f"Dropped (too old): {post['url']}")
 
-    kept.sort(key=lambda x: x["likes"], reverse=True)
-    log.info(f"Filtered: {len(tweets)} → {len(kept)} tweets kept")
+    # Sort newest first
+    def sort_key(p):
+        dt = _parse_date(p["date"])
+        return dt if dt else datetime.min.replace(tzinfo=timezone.utc)
+
+    kept.sort(key=sort_key, reverse=True)
+    log.info(f"Filtered: {len(posts)} → {len(kept)} posts kept (last {LOOKBACK_HOURS}h)")
     return kept

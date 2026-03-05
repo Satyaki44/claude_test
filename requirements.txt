@@ -1,3 +1,4 @@
-ntscraper
-anthropic
+feedparser
+httpx
+groq
 python-dotenv

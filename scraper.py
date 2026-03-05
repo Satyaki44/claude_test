@@ -1,86 +1,80 @@
 """
 scraper.py
-Searches Nitter (via ntscraper) for high-signal GTM + engineering tweets.
-No API key needed — fully free.
+Fetches posts from 10 Substack publications via free RSS feeds.
+No API key required.
 """
 
+import re
 import time
 import logging
-from ntscraper import Nitter
+import feedparser
 
 logging.basicConfig(level=logging.INFO, format="%(asctime)s %(levelname)s %(message)s")
 log = logging.getLogger(__name__)
 
-# --- Search queries -----------------------------------------------------------
-QUERIES = [
-    "GTM engineering",
-    "go-to-market engineering",
-    "developer-led growth engineering",
-    "PLG engineering",
-    "RevOps engineering",
-    "sales engineering growth",
+SUBSTACK_FEEDS = [
+    "https://thegtmnewsletter.substack.com/feed",         # GTMnow
+    "https://gtmengineerschool.substack.com/feed",        # GTM Engineer Pulse
+    "https://growthwithalex.substack.com/feed",           # Growth with Alex
+    "https://buildingcreativemachines.substack.com/feed", # Building Creative Machines
+    "https://startupgtm.substack.com/feed",               # StartupGTM
+    "https://aimaker.substack.com/feed",                  # AI Maker
+    "https://aidrivenmarketing.substack.com/feed",        # AI Driven Marketing
+    "https://revengine.substack.com/feed",                # RevEngine
+    "https://nathanbenaich.substack.com/feed",            # State of AI
+    "https://20vc.substack.com/feed",                     # 20VC Newsletter
 ]
 
-TWEETS_PER_QUERY = 50   # fetch this many, filter down after
-LOOKBACK_HOURS   = 24   # only keep tweets from the last N hours
+
+def _strip_html(text: str) -> str:
+    """Remove HTML tags and collapse whitespace."""
+    text = re.sub(r"<[^>]+>", " ", text or "")
+    return re.sub(r"\s+", " ", text).strip()
 
 
-def _parse_count(raw) -> int:
-    """Ntscraper returns counts as ints or strings like '1.2K'. Normalise."""
-    if isinstance(raw, int):
-        return raw
-    if isinstance(raw, str):
-        raw = raw.strip().upper()
-        if raw.endswith("K"):
-            return int(float(raw[:-1]) * 1_000)
-        if raw.endswith("M"):
-            return int(float(raw[:-1]) * 1_000_000)
-        try:
-            return int(raw)
-        except ValueError:
-            return 0
-    return 0
-
-
-def fetch_tweets() -> list[dict]:
+def fetch_posts() -> list[dict]:
     """
-    Run all queries against Nitter and return a deduplicated list of raw tweets.
-    Each tweet dict has at minimum:
-        text, link, date, likes, retweets, author
+    Fetch and deduplicate posts from all Substack feeds.
+    Each post dict has: title, author, url, date, summary
     """
-    scraper = Nitter(log_level=1, skip_instance_check=False)
-    seen_links: set[str] = set()
-    results: list[dict] = []
+    posts: list[dict] = []
+    seen: set[str] = set()
 
-    for query in QUERIES:
-        log.info(f"Searching: '{query}'")
+    for feed_url in SUBSTACK_FEEDS:
+        log.info(f"Fetching: {feed_url}")
         try:
-            data = scraper.get_tweets(query, mode="term", number=TWEETS_PER_QUERY)
-        except Exception as e:
-            log.warning(f"Query '{query}' failed: {e}")
-            time.sleep(2)
-            continue
+            feed = feedparser.parse(feed_url)
+            publication = feed.feed.get("title", feed_url)
 
-        tweets = data.get("tweets", [])
-        log.info(f"  → {len(tweets)} raw results")
-
-        for t in tweets:
-            link = t.get("link", "")
-            if not link or link in seen_links:
+            if feed.bozo and not feed.entries:
+                log.warning(f"  Failed to parse feed: {feed_url}")
                 continue
-            seen_links.add(link)
 
-            results.append({
-                "text":     t.get("text", "").strip(),
-                "link":     link,
-                "date":     t.get("date", ""),
-                "likes":    _parse_count(t.get("likes", 0)),
-                "retweets": _parse_count(t.get("retweets", 0)),
-                "author":   t.get("user", {}).get("name", ""),
-                "handle":   t.get("user", {}).get("username", ""),
-            })
+            log.info(f"  {publication}: {len(feed.entries)} entries")
 
-        time.sleep(1)   # be polite between queries
+            for entry in feed.entries:
+                url = entry.get("link", "")
+                if not url or url in seen:
+                    continue
+                seen.add(url)
 
-    log.info(f"Total unique tweets fetched: {len(results)}")
-    return results
+                summary = _strip_html(
+                    entry.get("summary", "") or entry.get("content", [{}])[0].get("value", "")
+                )
+
+                posts.append({
+                    "title":       entry.get("title", "").strip(),
+                    "author":      entry.get("author", publication),
+                    "publication": publication,
+                    "url":         url,
+                    "date":        entry.get("published", ""),
+                    "summary":     summary[:1000],  # cap summary length
+                })
+
+        except Exception as e:
+            log.warning(f"  Error fetching {feed_url}: {e}")
+
+        time.sleep(1)  # be polite between requests
+
+    log.info(f"Total unique posts fetched: {len(posts)}")
+    return posts

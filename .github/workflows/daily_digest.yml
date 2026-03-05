@@ -1,38 +1,38 @@
-name: GTM Engineering Daily Digest
+name: Daily GTM x AI Twitter Posts
 
 on:
   schedule:
-    - cron: "0 7 * * *"   # 7:00 AM UTC every day
-  workflow_dispatch:        # allow manual trigger from GitHub UI
+    - cron: '30 2 * * *'   # 8:00 AM IST (UTC+5:30) every day
+  workflow_dispatch:         # manual trigger from GitHub UI anytime
 
 jobs:
-  digest:
+  generate-and-send:
     runs-on: ubuntu-latest
-    permissions:
-      contents: write       # needed to commit the digest file back
 
     steps:
-      - name: Checkout repo
+      - name: Checkout code
         uses: actions/checkout@v4
 
       - name: Set up Python
         uses: actions/setup-python@v5
         with:
-          python-version: "3.11"
-          cache: "pip"
+          python-version: '3.11'
+          cache: 'pip'
 
       - name: Install dependencies
         run: pip install -r requirements.txt
 
-      - name: Run digest
+      - name: Run pipeline
         env:
-          ANTHROPIC_API_KEY: ${{ secrets.ANTHROPIC_API_KEY }}
+          GROQ_API_KEY: ${{ secrets.GROQ_API_KEY }}
+          TELEGRAM_BOT_TOKEN: ${{ secrets.TELEGRAM_BOT_TOKEN }}
+          TELEGRAM_CHANNEL_ID: ${{ secrets.TELEGRAM_CHANNEL_ID }}
         run: python main.py
 
-      - name: Commit digest to repo
+      - name: Save digest to repo
         run: |
           git config user.name  "github-actions[bot]"
           git config user.email "github-actions[bot]@users.noreply.github.com"
           git add digests/
-          git diff --cached --quiet || git commit -m "chore: daily GTM digest $(date -u +%Y-%m-%d)"
+          git diff --cached --quiet || git commit -m "digest: $(date -u +%Y-%m-%d)"
           git push
