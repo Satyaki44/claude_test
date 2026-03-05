@@ -1,87 +1,129 @@
 """
 scraper.py
-Fetches posts from 10 Substack publications via free RSS feeds.
-No API key required.
+Fetches GTM/PLG/RevOps posts from Hacker News (via Algolia API) and dev.to.
+Both sources are fully open and work from GitHub Actions.
 """
 
-import re
 import time
 import logging
-import feedparser
+from datetime import datetime, timezone, timedelta
 import httpx
 
 logging.basicConfig(level=logging.INFO, format="%(asctime)s %(levelname)s %(message)s")
 log = logging.getLogger(__name__)
 
-SUBSTACK_FEEDS = [
-    "https://thegtmnewsletter.substack.com/feed",         # GTMnow
-    "https://gtmengineerschool.substack.com/feed",        # GTM Engineer Pulse
-    "https://growthwithalex.substack.com/feed",           # Growth with Alex
-    "https://buildingcreativemachines.substack.com/feed", # Building Creative Machines
-    "https://startupgtm.substack.com/feed",               # StartupGTM
-    "https://aimaker.substack.com/feed",                  # AI Maker
-    "https://aidrivenmarketing.substack.com/feed",        # AI Driven Marketing
-    "https://revengine.substack.com/feed",                # RevEngine
-    "https://nathanbenaich.substack.com/feed",            # State of AI
-    "https://20vc.substack.com/feed",                     # 20VC Newsletter
+HN_QUERIES = [
+    "GTM engineering",
+    "PLG product led growth",
+    "RevOps revenue operations",
+    "sales automation AI",
+    "growth engineering",
+    "marketing automation engineering",
+    "CRM integration",
+    "go to market strategy",
 ]
 
+DEVTO_TAGS = [
+    "gtm",
+    "marketing",
+    "growth",
+    "salesautomation",
+    "revops",
+]
 
-def _strip_html(text: str) -> str:
-    """Remove HTML tags and collapse whitespace."""
-    text = re.sub(r"<[^>]+>", " ", text or "")
-    return re.sub(r"\s+", " ", text).strip()
+LOOKBACK_HOURS = 168  # 7 days
 
 
-def fetch_posts() -> list[dict]:
-    """
-    Fetch and deduplicate posts from all Substack feeds.
-    Each post dict has: title, author, url, date, summary
-    """
-    posts: list[dict] = []
+def _cutoff_ts() -> int:
+    return int((datetime.now(tz=timezone.utc) - timedelta(hours=LOOKBACK_HOURS)).timestamp())
+
+
+def fetch_hn_posts(client: httpx.Client) -> list[dict]:
+    posts = []
+    seen: set[str] = set()
+    cutoff = _cutoff_ts()
+
+    for query in HN_QUERIES:
+        log.info(f"HN search: '{query}'")
+        try:
+            resp = client.get(
+                "https://hn.algolia.com/api/v1/search",
+                params={
+                    "query": query,
+                    "tags": "story",
+                    "numericFilters": f"created_at_i>{cutoff}",
+                    "hitsPerPage": 20,
+                },
+                timeout=15,
+            )
+            resp.raise_for_status()
+            hits = resp.json().get("hits", [])
+            log.info(f"  {len(hits)} hits")
+
+            for h in hits:
+                url = h.get("url") or f"https://news.ycombinator.com/item?id={h['objectID']}"
+                if url in seen:
+                    continue
+                seen.add(url)
+                posts.append({
+                    "title":       h.get("title", "").strip(),
+                    "author":      h.get("author", ""),
+                    "publication": "Hacker News",
+                    "url":         url,
+                    "date":        h.get("created_at", ""),
+                    "summary":     f"HN points: {h.get('points', 0)} | comments: {h.get('num_comments', 0)}",
+                })
+        except Exception as e:
+            log.warning(f"  HN query failed: {e}")
+
+        time.sleep(0.5)
+
+    return posts
+
+
+def fetch_devto_posts(client: httpx.Client) -> list[dict]:
+    posts = []
     seen: set[str] = set()
 
-    headers = {
-        "User-Agent": "Mozilla/5.0 (compatible; Feedfetcher/1.0; +https://github.com/Satyaki44/claude_test)"
-    }
-
-    for feed_url in SUBSTACK_FEEDS:
-        log.info(f"Fetching: {feed_url}")
+    for tag in DEVTO_TAGS:
+        log.info(f"dev.to tag: #{tag}")
         try:
-            resp = httpx.get(feed_url, headers=headers, timeout=15, follow_redirects=True)
+            resp = client.get(
+                "https://dev.to/api/articles",
+                params={"tag": tag, "per_page": 20, "top": 7},
+                timeout=15,
+            )
             resp.raise_for_status()
-            feed = feedparser.parse(resp.text)
-            publication = feed.feed.get("title", feed_url)
+            articles = resp.json()
+            log.info(f"  {len(articles)} articles")
 
-            if feed.bozo and not feed.entries:
-                log.warning(f"  Failed to parse feed: {feed_url}")
-                continue
-
-            log.info(f"  {publication}: {len(feed.entries)} entries")
-
-            for entry in feed.entries:
-                url = entry.get("link", "")
+            for a in articles:
+                url = a.get("url", "")
                 if not url or url in seen:
                     continue
                 seen.add(url)
-
-                summary = _strip_html(
-                    entry.get("summary", "") or entry.get("content", [{}])[0].get("value", "")
-                )
-
                 posts.append({
-                    "title":       entry.get("title", "").strip(),
-                    "author":      entry.get("author", publication),
-                    "publication": publication,
+                    "title":       a.get("title", "").strip(),
+                    "author":      a.get("user", {}).get("name", ""),
+                    "publication": "dev.to",
                     "url":         url,
-                    "date":        entry.get("published", ""),
-                    "summary":     summary[:1000],  # cap summary length
+                    "date":        a.get("published_at", ""),
+                    "summary":     (a.get("description") or "")[:500],
                 })
-
         except Exception as e:
-            log.warning(f"  Error fetching {feed_url}: {e}")
+            log.warning(f"  dev.to tag #{tag} failed: {e}")
 
-        time.sleep(1)  # be polite between requests
+        time.sleep(0.5)
 
-    log.info(f"Total unique posts fetched: {len(posts)}")
     return posts
+
+
+def fetch_posts() -> list[dict]:
+    """Fetch GTM/PLG/RevOps posts from HN and dev.to."""
+    with httpx.Client() as client:
+        hn_posts = fetch_hn_posts(client)
+        devto_posts = fetch_devto_posts(client)
+
+    all_posts = hn_posts + devto_posts
+    log.info(f"Total unique posts fetched: {len(all_posts)}")
+    return all_posts

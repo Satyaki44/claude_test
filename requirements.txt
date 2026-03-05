@@ -1,4 +1,3 @@
-feedparser
 httpx
 groq
 python-dotenv
