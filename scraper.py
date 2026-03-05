@@ -8,6 +8,7 @@ import re
 import time
 import logging
 import feedparser
+import httpx
 
 logging.basicConfig(level=logging.INFO, format="%(asctime)s %(levelname)s %(message)s")
 log = logging.getLogger(__name__)
@@ -40,10 +41,16 @@ def fetch_posts() -> list[dict]:
     posts: list[dict] = []
     seen: set[str] = set()
 
+    headers = {
+        "User-Agent": "Mozilla/5.0 (compatible; Feedfetcher/1.0; +https://github.com/Satyaki44/claude_test)"
+    }
+
     for feed_url in SUBSTACK_FEEDS:
         log.info(f"Fetching: {feed_url}")
         try:
-            feed = feedparser.parse(feed_url)
+            resp = httpx.get(feed_url, headers=headers, timeout=15, follow_redirects=True)
+            resp.raise_for_status()
+            feed = feedparser.parse(resp.text)
             publication = feed.feed.get("title", feed_url)
 
             if feed.bozo and not feed.entries:
