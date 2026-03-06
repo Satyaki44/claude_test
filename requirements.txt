@@ -2,3 +2,5 @@ feedparser
 httpx
 groq
 python-dotenv
+scikit-learn
+numpy
