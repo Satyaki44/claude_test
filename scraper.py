@@ -1,6 +1,6 @@
 """
 scraper.py
-Fetches posts from 10 Substack publications via free RSS feeds.
+Fetches posts from 20 publications via free RSS feeds (Substack + open RSS).
 No API key required.
 """
 
@@ -12,7 +12,8 @@ import feedparser
 logging.basicConfig(level=logging.INFO, format="%(asctime)s %(levelname)s %(message)s")
 log = logging.getLogger(__name__)
 
-SUBSTACK_FEEDS = [
+FEEDS = [
+    # --- Original 10 ---
     "https://thegtmnewsletter.substack.com/feed",         # GTMnow
     "https://gtmengineerschool.substack.com/feed",        # GTM Engineer Pulse
     "https://growthwithalex.substack.com/feed",           # Growth with Alex
@@ -23,6 +24,18 @@ SUBSTACK_FEEDS = [
     "https://revengine.substack.com/feed",                # RevEngine
     "https://nathanbenaich.substack.com/feed",            # State of AI
     "https://20vc.substack.com/feed",                     # 20VC Newsletter
+
+    # --- New 10: GTM, AI marketing, PLG, RevOps ---
+    "https://gtmonday.substack.com/feed",                 # GTMonday by GTM Partners
+    "https://knowledge.gtmstrategist.com/feed",           # GTM Strategist (Maja Voje)
+    "https://www.gtmaipodcast.com/feed",                  # GTM AI Podcast & Newsletter
+    "https://www.kieranflanagan.io/feed",                 # AI Marketing Generalist (Kieran Flanagan)
+    "https://newsletter.mkt1.co/feed",                    # MKT1 Newsletter (Emily Kramer)
+    "https://fullfunnel.substack.com/feed",               # Full-Funnel B2B Marketing
+    "https://pierreherubel.substack.com/feed",            # Pierre's Content Guides
+    "https://www.lennysnewsletter.com/feed",              # Lenny's Newsletter (PLG, SaaS)
+    "https://www.news.aakashg.com/feed",                  # Product Growth (Aakash Gupta)
+    "https://blog.hubspot.com/marketing/rss.xml",         # HubSpot Marketing Blog
 ]
 
 
@@ -40,7 +53,7 @@ def fetch_posts() -> list[dict]:
     posts: list[dict] = []
     seen: set[str] = set()
 
-    for feed_url in SUBSTACK_FEEDS:
+    for feed_url in FEEDS:
         log.info(f"Fetching: {feed_url}")
         try:
             feed = feedparser.parse(feed_url)
