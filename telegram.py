@@ -1,7 +1,8 @@
 """
 telegram.py
-Publishes 3 digest posts as separate Telegram messages, each with 👍/👎 buttons.
-Saves message_log.json so feedback.py can match reactions tomorrow.
+Publishes 3 digest posts as separate Telegram messages.
+Saves message_log.json so feedback.py can match native emoji reactions tomorrow.
+React with ❤️ to like, 👎 to dislike — no buttons needed.
 
 Setup (one-time):
   1. Message @BotFather on Telegram → /newbot → copy the token
@@ -72,8 +73,8 @@ def _save_message_log(messages: list[dict]):
 
 def publish(digest: str) -> bool:
     """
-    Parse digest into individual posts and send each as a separate Telegram message
-    with 👍/👎 inline keyboard buttons.
+    Parse digest into individual posts and send each as a separate Telegram message.
+    No inline buttons — feedback is collected via native Telegram emoji reactions.
     Returns True if all messages sent successfully.
     """
     token = os.environ.get("TELEGRAM_BOT_TOKEN")
@@ -99,18 +100,10 @@ def publish(digest: str) -> bool:
         if len(post_text) > MAX_LENGTH:
             post_text = post_text[:MAX_LENGTH - 3] + "..."
 
-        keyboard = {
-            "inline_keyboard": [[
-                {"text": "👍", "callback_data": f"like_{i}"},
-                {"text": "👎", "callback_data": f"dislike_{i}"},
-            ]]
-        }
-
         result = _api(
             token, "sendMessage",
             chat_id=channel,
             text=post_text,
-            reply_markup=keyboard,
         )
 
         if result.get("ok"):
