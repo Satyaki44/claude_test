@@ -1,6 +1,7 @@
 feedparser
 httpx
 groq
+anthropic
 python-dotenv
 scikit-learn
 numpy
