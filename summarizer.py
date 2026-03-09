@@ -34,6 +34,12 @@ FOCUS — every post must do one of these things:
 - Help the reader understand something about the GTM x AI intersection they hadn't framed clearly before
 - Offer commentary that makes people think, not just nod
 
+Rotate post types — the 3 posts together must cover all 3 of these:
+- Actionable: concrete next steps, what to actually do, how to apply the insight right now
+- Landscape: a specific trend accelerating in AI/GTM — name what's shifting and why it matters now
+- Reframe: a counterintuitive take that makes the reader see GTM or AI differently
+Never write two posts that make the same rhetorical move (e.g., don't write 2 posts that both end "the ones who X will win").
+
 STRUCTURE:
 - Open with a direct hook: a bold claim, a sharp observation, or a specific fact from the source
 - Short paragraphs (1–2 sentences). No paragraph blocks.
@@ -121,11 +127,14 @@ Step 1: Read all {n_pairs} pairs carefully.
 Step 2: For each pair, identify the bridge concept in one sentence. \
 What does reading A and B together reveal that neither A nor B says alone?
 
-Step 3: Pick the 3 strongest bridges — choosing ones that are MAXIMALLY DIFFERENT from each other.
-- The 3 posts MUST cover distinct themes, angles, and subject matter.
-- If multiple pairs are about the same topic (e.g., both about AI tools, or both about team scaling), \
-pick only ONE bridge from that topic cluster. Force variety.
-- A reader should feel like the 3 posts are about 3 completely different things.
+Step 3: Pick the 3 strongest bridges — one per post type below. You MUST use all 3 types:
+- POST TYPE A (Actionable): concrete next steps — what to do, how to apply this insight today
+- POST TYPE B (Landscape): a specific trend accelerating in AI/GTM — name what's shifting and why it matters now
+- POST TYPE C (Reframe): a counterintuitive observation that makes the reader think differently about GTM or AI
+
+Assign each selected bridge to one type. Do not write two posts of the same type.
+If multiple pairs map to the same type, pick the strongest one only.
+A reader should feel like the 3 posts are about 3 completely different things AND make 3 completely different rhetorical moves.
 
 Step 4: Write one Twitter post per bridge. Each post must:
 - Open with a strong hook — a bold claim, a counterintuitive observation, or a specific number
