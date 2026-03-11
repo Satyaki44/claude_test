@@ -1,21 +1,15 @@
 """
 telegram.py
-Publishes 3 digest posts as separate Telegram messages.
-Saves message_log.json so feedback.py can match native emoji reactions tomorrow.
-React with ❤️ to like, 👎 to dislike — no buttons needed.
+Publishes the daily GTM feed as a single Telegram message.
+Format: conversational header + numbered list of 5 articles,
+each with a hyperlinked title, 1-2 line blurb, and Read more link.
 
-Setup (one-time):
-  1. Message @BotFather on Telegram → /newbot → copy the token
-  2. Add your bot to your channel as admin
-  3. Add to .env:
-       TELEGRAM_BOT_TOKEN=your_token_here
-       TELEGRAM_CHANNEL_ID=@yourchannel   (or numeric: -100xxxxxxxxxx)
+Saves data/message_log.json so feedback.py can match emoji reactions.
 """
 
 import json
 import logging
 import os
-import re
 from datetime import datetime, timezone
 
 import httpx
@@ -24,7 +18,11 @@ log = logging.getLogger(__name__)
 
 TELEGRAM_API = "https://api.telegram.org/bot{token}/{method}"
 MAX_LENGTH = 4096
-MESSAGE_LOG_PATH = "message_log.json"
+MESSAGE_LOG_PATH = "data/message_log.json"
+
+HEADER = "Hey GTM Maxis! Here are your top 5 GTM updates for today 👇"
+OUTRO = "That's it for today. See you tomorrow. 👋"
+SEPARATOR = "―――――――――――"
 
 
 def _api(token: str, method: str, **kwargs) -> dict:
@@ -38,20 +36,35 @@ def _api(token: str, method: str, **kwargs) -> dict:
         return {}
 
 
-def _parse_posts(digest: str) -> list[str]:
-    """Split digest string into individual posts using the ---\\nPOST N delimiter."""
-    parts = re.split(r"-{3,}\s*\nPOST \d+\s*\n", digest)
-    posts = []
-    for part in parts:
-        cleaned = part.strip().rstrip("-").strip()
-        if len(cleaned) > 20:   # ignore tiny fragments
-            posts.append(cleaned)
-    return posts
+def _escape_html(text: str) -> str:
+    return text.replace("&", "&amp;").replace("<", "&lt;").replace(">", "&gt;")
 
 
-def _save_message_log(messages: list[dict]):
-    """Persist sent message metadata for tomorrow's feedback poll."""
-    # Preserve last_update_id across runs
+def _build_digest_message(posts: list[dict]) -> str:
+    """Build a single HTML message with all posts as a numbered list."""
+    lines = [HEADER, ""]
+
+    for i, post in enumerate(posts, 1):
+        headline = _escape_html(post.get("headline", post.get("title", "Untitled")))
+        url = post.get("url", "")
+        blurb = _escape_html(post.get("blurb", ""))
+
+        lines.append(f"{i}. <b>{headline}</b>")
+        lines.append("")
+        if blurb:
+            lines.append(blurb)
+            lines.append("")
+        lines.append(f'<a href="{url}">Read more →</a>')
+        lines.append("")
+        lines.append(SEPARATOR)
+        lines.append("")
+
+    lines.append(OUTRO)
+    return "\n".join(lines).strip()
+
+
+def _save_message_log(message_id: int, posts: list[dict]):
+    """Persist sent message metadata for feedback polling."""
     last_update_id = 0
     if os.path.exists(MESSAGE_LOG_PATH):
         try:
@@ -63,19 +76,26 @@ def _save_message_log(messages: list[dict]):
 
     data = {
         "date": datetime.now(tz=timezone.utc).strftime("%Y-%m-%d"),
-        "messages": messages,
+        "messages": [
+            {
+                "message_id": message_id,
+                "post_index": 1,
+                "snippet": HEADER,
+                "urls": [p.get("url", "") for p in posts],
+            }
+        ],
         "last_update_id": last_update_id,
     }
+    os.makedirs(os.path.dirname(MESSAGE_LOG_PATH), exist_ok=True)
     with open(MESSAGE_LOG_PATH, "w") as f:
         json.dump(data, f, indent=2)
-    log.info(f"Message log saved: {len(messages)} entries")
+    log.info("Message log saved.")
 
 
-def publish(digest: str) -> bool:
+def publish(posts: list[dict]) -> bool:
     """
-    Parse digest into individual posts and send each as a separate Telegram message.
-    No inline buttons — feedback is collected via native Telegram emoji reactions.
-    Returns True if all messages sent successfully.
+    Publish all enriched posts as a single Telegram message.
+    Returns True if sent successfully.
     """
     token = os.environ.get("TELEGRAM_BOT_TOKEN")
     channel = os.environ.get("TELEGRAM_CHANNEL_ID")
@@ -85,38 +105,27 @@ def publish(digest: str) -> bool:
             "TELEGRAM_BOT_TOKEN and TELEGRAM_CHANNEL_ID must be set in .env"
         )
 
-    posts = _parse_posts(digest)
-
     if not posts:
-        log.warning("Could not parse posts from digest — sending as single message.")
-        result = _api(token, "sendMessage", chat_id=channel, text=digest[:MAX_LENGTH])
-        return result.get("ok", False)
+        log.warning("telegram: no posts to publish.")
+        return False
 
-    log.info(f"Sending {len(posts)} posts as separate Telegram messages")
-    sent_messages = []
-    all_ok = True
+    text = _build_digest_message(posts)
+    if len(text) > MAX_LENGTH:
+        text = text[:MAX_LENGTH - 3] + "..."
 
-    for i, post_text in enumerate(posts, 1):
-        if len(post_text) > MAX_LENGTH:
-            post_text = post_text[:MAX_LENGTH - 3] + "..."
+    result = _api(
+        token, "sendMessage",
+        chat_id=channel,
+        text=text,
+        parse_mode="HTML",
+        disable_web_page_preview=True,
+    )
 
-        result = _api(
-            token, "sendMessage",
-            chat_id=channel,
-            text=post_text,
-        )
-
-        if result.get("ok"):
-            message_id = result["result"]["message_id"]
-            sent_messages.append({
-                "message_id": message_id,
-                "post_index": i,
-                "snippet": post_text[:200],
-            })
-            log.info(f"Sent post {i}/{len(posts)} — message_id: {message_id}")
-        else:
-            log.error(f"Failed to send post {i}: {result}")
-            all_ok = False
-
-    _save_message_log(sent_messages)
-    return all_ok
+    if result.get("ok"):
+        message_id = result["result"]["message_id"]
+        log.info(f"GTM feed published — message_id: {message_id}")
+        _save_message_log(message_id, posts)
+        return True
+    else:
+        log.error(f"Failed to publish feed: {result}")
+        return False

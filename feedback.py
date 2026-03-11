@@ -22,8 +22,8 @@ import httpx
 
 log = logging.getLogger(__name__)
 
-MESSAGE_LOG_PATH = "message_log.json"
-PREFERENCES_PATH = "preferences.json"
+MESSAGE_LOG_PATH = "data/message_log.json"
+PREFERENCES_PATH = "data/preferences.json"
 TELEGRAM_API = "https://api.telegram.org/bot{token}/{method}"
 
 # Emojis treated as positive signal

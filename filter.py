@@ -10,7 +10,7 @@ from typing import Optional
 
 log = logging.getLogger(__name__)
 
-LOOKBACK_HOURS = 168  # 7 days
+LOOKBACK_HOURS = 24  # 1 day (daily feed)
 
 
 def _parse_date(date_str: str) -> Optional[datetime]:
