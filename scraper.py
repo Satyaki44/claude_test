@@ -6,6 +6,7 @@ No API key required.
 
 import re
 import time
+import socket
 import logging
 import feedparser
 
@@ -36,6 +37,28 @@ FEEDS = [
     "https://www.lennysnewsletter.com/feed",              # Lenny's Newsletter (PLG, SaaS)
     "https://www.news.aakashg.com/feed",                  # Product Growth (Aakash Gupta)
     "https://blog.hubspot.com/marketing/rss.xml",         # HubSpot Marketing Blog
+
+    # --- New 20: GTM, Sales, RevOps, PLG, AI, B2B Marketing ---
+    "https://outboundkitchen.substack.com/feed",          # Outbound Kitchen (Elric Legloire) — SDR math, cold email, AI-assisted prospecting
+    "https://kylepoyar.substack.com/feed",                # Growth Unhinged (Kyle Poyar) — PLG, pricing, SaaS benchmarks, 80k+ readers
+    "https://www.elenaverna.com/feed",                    # Elena's Growth Scoop (Elena Verna) — PLG, freemium, product-led sales, 85k+
+    "https://thetransaction.substack.com/feed",           # The Transaction (Craig Rosenberg) — CRO/CMO interviews, sales motion design
+    "https://revopsfm.substack.com/feed",                 # RevOps FM (Justin Norris) — RevOps, HubSpot/Salesforce, GTM ops
+    "https://koenstam.substack.com/feed",                 # GTM OS (Koen Stam) — signal-based outbound, AI-native GTM workflows
+    "https://claygtmengineering.substack.com/feed",       # Claymation (Alex Lindahl) — Clay workflows, AI enrichment, outbound automation
+    "https://demandloops.substack.com/feed",              # Looped In (Kaylee Edmondson) — demand gen, pipeline generation, B2B SaaS
+    "https://b2bmarketingstrategies.substack.com/feed",   # B2B Marketing Strategies (Arpit Mishra) — ICP, positioning, launch playbooks
+    "https://www.saastr.com/feed",                        # SaaStr (Jason Lemkin) — SaaS benchmarks, hiring, ARR milestones
+    "https://openviewpartners.com/feed",                  # OpenView Blog — PLG research, pricing, product-led sales frameworks
+    "https://tomtunguz.com/index.xml",                    # Tomasz Tunguz (Theory Ventures) — AI + SaaS metrics, GTM trends
+    "https://www.exitfive.com/rss.xml",                   # Exit Five (Dave Gerhardt) — B2B marketing, positioning, demand gen, 40k+
+    "https://peeplaja.com/feed",                          # Peep Laja (Wynter/CXL) — B2B differentiation, competitive positioning
+    "https://www.swipefiles.com/feed",                    # Swipe Files (Corey Haines) — SaaS marketing playbooks, growth experiments
+    "https://cxl.com/blog/feed/",                         # CXL Blog — conversion optimization, B2B messaging, SaaS growth research
+    "https://www.dearstage2.com/feed",                    # Dear Stage 2 (Liz Christo) — founder GTM questions, VC-backed operator advice
+    "https://thegtme.com/feed",                           # The GTM Engineer by Clay — AI + automation for pipeline
+    "https://feeds.captivate.fm/the-b2b-playbook/",       # The B2B Playbook — demand gen, ABM, intent signals
+    "https://www.refinelabs.com/feed",                    # Refine Labs (Chris Walker) — dark-social demand gen, B2B buyer behavior
 ]
 
 
@@ -56,6 +79,7 @@ def fetch_posts() -> list[dict]:
     for feed_url in FEEDS:
         log.info(f"Fetching: {feed_url}")
         try:
+            socket.setdefaulttimeout(10)
             feed = feedparser.parse(feed_url)
             publication = feed.feed.get("title", feed_url)
 

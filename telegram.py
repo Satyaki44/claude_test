@@ -20,7 +20,7 @@ TELEGRAM_API = "https://api.telegram.org/bot{token}/{method}"
 MAX_LENGTH = 4096
 MESSAGE_LOG_PATH = "data/message_log.json"
 
-HEADER = "Hey GTM Maxis! Here are your top 5 GTM updates for today 👇"
+HEADER = "Hey GTM Maxis! Here are your top GTM updates for today 👇"
 OUTRO = "That's it for today. See you tomorrow. 👋"
 SEPARATOR = "―――――――――――"
 
@@ -55,8 +55,6 @@ def _build_digest_message(posts: list[dict]) -> str:
             lines.append(blurb)
             lines.append("")
         lines.append(f'<a href="{url}">Read more →</a>')
-        lines.append("")
-        lines.append(SEPARATOR)
         lines.append("")
 
     lines.append(OUTRO)
