@@ -9,6 +9,7 @@ Run via cron:      render.yaml (12:30 UTC = 6:00 PM IST)
 
 import os
 import sys
+import json
 import logging
 from datetime import datetime, timezone
 from dotenv import load_dotenv
@@ -28,6 +29,41 @@ logging.basicConfig(
 log = logging.getLogger(__name__)
 
 DIGESTS_DIR = "digests"
+
+# Shared cache — GTM Writer reads from this instead of re-pulling feeds
+WRITER_CACHE_PATH = os.path.join(os.path.dirname(__file__), "../gtm-writer/data/daily_cache.json")
+
+
+def save_writer_cache(posts: list[dict]):
+    """Write enriched insights to shared cache for GTM Writer dashboard."""
+    cache = {
+        "pulled_at": datetime.now(tz=timezone.utc).isoformat(),
+        "insights": posts,
+    }
+    # Local file (dev only)
+    try:
+        os.makedirs(os.path.dirname(WRITER_CACHE_PATH), exist_ok=True)
+        with open(WRITER_CACHE_PATH, "w") as f:
+            json.dump(cache, f, indent=2)
+        log.info(f"Writer cache saved: {WRITER_CACHE_PATH}")
+    except Exception as e:
+        log.warning(f"Could not save writer cache locally: {e}")
+
+    # Redis (production)
+    redis_url = os.getenv("UPSTASH_REDIS_URL")
+    redis_token = os.getenv("UPSTASH_REDIS_TOKEN")
+    if redis_url and redis_token:
+        try:
+            import httpx
+            httpx.post(
+                f"{redis_url}/set/gtm_daily_cache",
+                headers={"Authorization": f"Bearer {redis_token}"},
+                content=json.dumps(cache),
+                timeout=10,
+            )
+            log.info("Writer cache pushed to Redis.")
+        except Exception as e:
+            log.warning(f"Redis push failed: {e}")
 
 
 def save_digest(posts: list[dict]) -> str:
@@ -98,6 +134,9 @@ def run(preview: bool = False):
     # Step 6: save locally
     path = save_digest(enriched or ranked)
     log.info(f"Digest saved: {path}")
+
+    # Step 7: update shared cache for GTM Writer
+    save_writer_cache(enriched or ranked)
 
 
 if __name__ == "__main__":
