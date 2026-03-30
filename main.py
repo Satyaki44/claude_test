@@ -52,6 +52,8 @@ def save_writer_cache(posts: list[dict]):
     # Redis (production)
     redis_url = os.getenv("UPSTASH_REDIS_URL")
     redis_token = os.getenv("UPSTASH_REDIS_TOKEN")
+    if redis_url and not redis_url.startswith("http"):
+        redis_url = "https://" + redis_url
     if redis_url and redis_token:
         try:
             import httpx
@@ -92,7 +94,7 @@ def print_preview(posts: list[dict]):
         print()
 
 
-def run(preview: bool = False):
+def run(preview: bool = False, skip_telegram: bool = False):
     log.info("=== GTM Feed ===")
 
     # Step 1: scrape all RSS sources
@@ -120,24 +122,27 @@ def run(preview: bool = False):
     # Step 4: summarize — add summary_text + gtm_angle to each post
     enriched = synthesize(ranked)
 
-    # Step 5: publish to Telegram
-    try:
-        success = publish(enriched)
-        if success:
-            log.info("Feed published to Telegram.")
-        else:
-            log.warning("Some Telegram messages failed — digest still saved locally.")
-    except EnvironmentError as e:
-        log.warning(f"Telegram skipped: {e}")
-        enriched = enriched or ranked
+    # Step 5: update shared cache for GTM Writer (before Telegram so data is consistent)
+    save_writer_cache(enriched or ranked)
 
-    # Step 6: save locally
+    # Step 6: publish to Telegram (skip if --skip-telegram)
+    if skip_telegram:
+        log.info("Telegram skipped (--skip-telegram flag).")
+    else:
+        try:
+            success = publish(enriched)
+            if success:
+                log.info("Feed published to Telegram.")
+            else:
+                log.warning("Some Telegram messages failed — digest still saved locally.")
+        except EnvironmentError as e:
+            log.warning(f"Telegram skipped: {e}")
+            enriched = enriched or ranked
+
+    # Step 7: save locally
     path = save_digest(enriched or ranked)
     log.info(f"Digest saved: {path}")
 
-    # Step 7: update shared cache for GTM Writer
-    save_writer_cache(enriched or ranked)
-
 
 if __name__ == "__main__":
-    run(preview="--preview" in sys.argv)
+    run(preview="--preview" in sys.argv, skip_telegram="--skip-telegram" in sys.argv)
